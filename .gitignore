@@ -1,0 +1,15 @@
+node_modules/
+dist/
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/.vite/
+*.log
+.DS_Store
+.ruff_cache/
+onestsignt
+.env
+files/
+results/
+reports/
+data/
