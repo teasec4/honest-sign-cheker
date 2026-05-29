@@ -1,3 +1,5 @@
+// Package codes — центральная структура Index: словарь код → где встречался.
+// Через неё проходят все данные: чтение, сверка, поиск дубликатов.
 package codes
 
 import (
@@ -6,6 +8,8 @@ import (
 	"sort"
 )
 
+// Location — координаты одного вхождения кода в исходном файле.
+// Для Excel: File + Sheet + Cell, для CSV/TXT: File + Line.
 type Location struct {
 	File  string
 	Sheet string
@@ -24,12 +28,17 @@ func (l Location) String() string {
 	return fileName
 }
 
+// Index — словарь всех кодов и их мест.
+// Ключ: нормализованный код (строка). Значение: список мест, где он встретился.
+// total считает все вхождения (с повторами), len(locations) — только уникальные коды.
 type Index struct {
 	locations   map[string][]Location
 	total       int
 	diagnostics *Diagnostics
 }
 
+// Diagnostics — статистика чтения: сколько строк/ячеек, сколько кодов, что пропущено.
+// Заполняется ридером и прикрепляется к Index.
 type Diagnostics struct {
 	File                 string          `json:"file"`
 	Sheet                string          `json:"sheet,omitempty"`
@@ -53,6 +62,8 @@ func NewIndex() Index {
 	}
 }
 
+// Add — добавить код и его местоположение. Если код уже есть — дописывает Location в слайс.
+// Увеличивает total (общий счётчик вхождений).
 func (i *Index) Add(code string, location Location) {
 	i.locations[code] = append(i.locations[code], location)
 	i.total++
@@ -96,6 +107,8 @@ func (i Index) Codes() []string {
 	return result
 }
 
+// DuplicateCodes — вернуть коды, у которых len(locations) > 1 (встретились 2+ раз).
+// Используется в duplicate-check и для поиска дубликатов в возврате.
 func (i Index) DuplicateCodes() []string {
 	var duplicates []string
 	for code, locations := range i.locations {
@@ -107,6 +120,8 @@ func (i Index) DuplicateCodes() []string {
 	return duplicates
 }
 
+// UnknownCodes — коды из this, которых НЕТ в known.
+// Ключевой метод для primary-check: «фабрика вернула код, который мы не выдавали».
 func (i Index) UnknownCodes(known Index) []string {
 	var unknown []string
 	for code := range i.locations {

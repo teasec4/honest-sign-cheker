@@ -1,10 +1,10 @@
+// Package input — чтение кодов из файлов (CSV, TXT, XLSX, XLSM).
+// Диспетчер ReadCodes() направляет в нужный ридер по расширению.
 package input
 
 import (
 	"fmt"
 	"onestsignt/internal/codes"
-	csvreader "onestsignt/internal/csv"
-	excelreader "onestsignt/internal/excel"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,17 +12,21 @@ import (
 
 var SupportedExtensions = []string{".csv", ".txt", ".xlsx", ".xlsm"}
 
+// ReadCodes — прочитать файл и вернуть Index с кодами.
+// Выбирает ридер по расширению: .csv/.txt → ReaderCSV, .xlsx/.xlsm → ReaderExcel.
 func ReadCodes(path string) (codes.Index, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".csv", ".txt":
-		return csvreader.NewReaderCSV(path).ReadCSV()
+		return NewReaderCSV(path).ReadCSV()
 	case ".xlsx", ".xlsm":
-		return excelreader.NewReaderExcel(path).ReadExcel()
+		return NewReaderExcel(path).ReadExcel()
 	default:
 		return codes.Index{}, fmt.Errorf("неподдерживаемый формат файла %q", path)
 	}
 }
 
+// FindNamedFile — найти файл baseName.* в dir (перебирает SupportedExtensions).
+// Используется когда известно имя без расширения, например "issued" → "issued.csv".
 func FindNamedFile(dir string, baseName string) (string, error) {
 	var matches []string
 	for _, extension := range SupportedExtensions {

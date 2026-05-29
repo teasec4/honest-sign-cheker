@@ -1,3 +1,5 @@
+// Package checker — основная логика проверок: сверка выдано/возврат и поиск дубликатов.
+// Используется как из CLI (cmd/primary-check, cmd/duplicate-check), так и из API (handler).
 package checker
 
 import (
@@ -49,7 +51,13 @@ type DuplicateReport struct {
 	Duplicates []Problem   `json:"duplicates"`
 }
 
+// RunPrimary — сверка «выдали ↔ вернули».
+//  1. Читаем оба файла через input.ReadCodes() → два Index.
+//  2. Строим Matcher по выданным кодам (n-граммный индекс).
+//  3. Для каждого возвращённого кода: точное / похожее / неизвестное.
+//  4. Отдельно ищем дубликаты в возврате.
 func RunPrimary(issuedPath, returnedPath string, minPercent float64) (PrimaryReport, error) {
+	// Читаем оба файла.
 	issued, err := input.ReadCodes(issuedPath)
 	if err != nil {
 		return PrimaryReport{}, fmt.Errorf("выданные коды: %w", err)
@@ -64,6 +72,7 @@ func RunPrimary(issuedPath, returnedPath string, minPercent float64) (PrimaryRep
 		config.MinPercent = minPercent
 	}
 
+	// Сопоставляем возвращённые коды с выданными.
 	results := match.NewMatcher(issued, config).MatchReturned(returned)
 	report := PrimaryReport{
 		MinPercent: config.MinPercent,
@@ -84,6 +93,7 @@ func RunPrimary(issuedPath, returnedPath string, minPercent float64) (PrimaryRep
 		Unknown:    []Problem{},
 	}
 
+	// Дубликаты: коды, которые встретились >1 раза в возврате.
 	for _, code := range returned.DuplicateCodes() {
 		report.Duplicates = append(report.Duplicates, Problem{
 			Type:              "ДУБЛИКАТ В ВОЗВРАТЕ",
@@ -95,6 +105,7 @@ func RunPrimary(issuedPath, returnedPath string, minPercent float64) (PrimaryRep
 	}
 	report.Summary.DuplicateUnique = len(report.Duplicates)
 
+	// Раскладываем результаты по категориям.
 	for _, result := range results {
 		count := len(result.ReturnedPlaces)
 		switch result.Status {
@@ -115,6 +126,8 @@ func RunPrimary(issuedPath, returnedPath string, minPercent float64) (PrimaryRep
 	return report, nil
 }
 
+// RunDuplicates — поиск дубликатов внутри одного файла.
+// Читает файл, возвращает все коды с len(locations) > 1.
 func RunDuplicates(path string) (DuplicateReport, error) {
 	index, err := input.ReadCodes(path)
 	if err != nil {

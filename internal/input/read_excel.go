@@ -1,4 +1,4 @@
-package excel
+package input
 
 import (
 	"onestsignt/internal/codes"
@@ -22,6 +22,10 @@ func (r ReaderExcel) Path() string {
 	return r.path
 }
 
+// ReadExcel — читает первый лист xlsx и возвращает Index с кодами.
+// Два режима:
+//  1. Быстрый: если есть колонка "DM CODE" — читает только её (пропуская заголовок).
+//  2. Медленный: иначе сканирует ВСЕ ячейки и фильтрует через isCodeLike().
 func (r ReaderExcel) ReadExcel() (codes.Index, error) {
 	file, err := excelize.OpenFile(r.path)
 	if err != nil {
@@ -44,6 +48,7 @@ func (r ReaderExcel) ReadExcel() (codes.Index, error) {
 		Rows:  len(rows),
 	}
 
+	// Быстрый путь: колонка "DM CODE" найдена в заголовке.
 	if columnIndex, ok := findHeaderColumn(rows, "DM CODE"); ok {
 		if err := r.readColumn(rows, sheetName, columnIndex, &index, &diagnostics); err != nil {
 			return codes.Index{}, err
@@ -52,6 +57,7 @@ func (r ReaderExcel) ReadExcel() (codes.Index, error) {
 		return index, nil
 	}
 
+	// Медленный путь: полный скан всех ячеек.
 	for rowIndex, row := range rows {
 		for colIndex, cell := range row {
 			code := normalize.NormalizeCode(cell)
@@ -89,6 +95,8 @@ func (r ReaderExcel) ReadExcel() (codes.Index, error) {
 	return index, nil
 }
 
+// readColumn — читает только одну колонку (быстрый путь).
+// Пропускает строку 0 (заголовок), начинает со строки 1.
 func (r ReaderExcel) readColumn(rows [][]string, sheetName string, columnIndex int, index *codes.Index, diagnostics *codes.Diagnostics) error {
 	columnName, err := excelize.ColumnNumberToName(columnIndex + 1)
 	if err != nil {
@@ -124,6 +132,8 @@ func (r ReaderExcel) readColumn(rows [][]string, sheetName string, columnIndex i
 	return nil
 }
 
+// findHeaderColumn — ищет колонку по заголовку в первой строке.
+// Нормализует имена: trim, upper, схлопывает пробелы.
 func findHeaderColumn(rows [][]string, header string) (int, bool) {
 	if len(rows) == 0 {
 		return 0, false
@@ -144,6 +154,8 @@ func normalizeHeader(value string) string {
 	return value
 }
 
+// isCodeLike — эвристика: ячейка похожа на код маркировки?
+// Коды DataMatrix всегда начинаются с "01" (GTIN) и содержат разделитель "93".
 func isCodeLike(code string) bool {
 	if strings.HasPrefix(code, "01") {
 		return true

@@ -1,4 +1,4 @@
-package csv
+package input
 
 import (
 	"onestsignt/internal/codes"
@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// ReaderCSV — читает CSV/TXT файл построчно. Каждая непустая строка = один код.
 type ReaderCSV struct {
 	path string
 }
@@ -21,6 +22,8 @@ func (r ReaderCSV) Path() string {
 	return r.path
 }
 
+// ReadCSV — читает файл, нормализует каждую строку и добавляет в Index.
+// Считает diagnostics: строки, непустые, засчитанные коды.
 func (r ReaderCSV) ReadCSV() (codes.Index, error) {
 	data, err := os.ReadFile(r.path)
 	if err != nil {
@@ -28,6 +31,7 @@ func (r ReaderCSV) ReadCSV() (codes.Index, error) {
 	}
 
 	index := codes.NewIndex()
+	// Нормализуем переносы строк (Windows \r\n → \n, старые Mac \r → \n).
 	dataText := strings.ReplaceAll(string(data), "\r\n", "\n")
 	dataText = strings.ReplaceAll(dataText, "\r", "\n")
 	lines := strings.Split(dataText, "\n")

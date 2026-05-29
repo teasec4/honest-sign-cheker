@@ -1,3 +1,5 @@
+// Package match — нечёткое сравнение кодов: находит похожие коды среди выданных.
+// Алгоритм: n-граммы для быстрого отбора кандидатов + расстояние Левенштейна для точной оценки.
 package match
 
 import (
@@ -7,15 +9,15 @@ import (
 )
 
 const (
-	StatusExact   = "ТОЧНОЕ СОВПАДЕНИЕ"
-	StatusFuzzy   = "ПОХОЖИЙ КОД"
-	StatusUnknown = "НЕ НАЙДЕН"
+	StatusExact   = "ТОЧНОЕ СОВПАДЕНИЕ" // код найден 1-в-1 в выданных
+	StatusFuzzy   = "ПОХОЖИЙ КОД"       // код похож на выданный, нужен ручной контроль
+	StatusUnknown = "НЕ НАЙДЕН"         // не удалось найти достаточно похожий код
 )
 
 type Config struct {
-	MinPercent    float64
-	GramSize      int
-	MaxCandidates int
+	MinPercent    float64 // порог схожести для StatusFuzzy (по умолчанию 85%)
+	GramSize      int     // размер n-граммы (по умолчанию 3 символа)
+	MaxCandidates int     // макс. число кандидатов для сравнения Левенштейном
 }
 
 func DefaultConfig() Config {
@@ -27,21 +29,25 @@ func DefaultConfig() Config {
 }
 
 type Result struct {
-	Status          string
-	ReturnedCode    string
-	ReturnedPlaces  []codes.Location
-	MatchedCode     string
-	MatchedPlaces   []codes.Location
-	MatchPercent    float64
-	SharedGramCount int
+	Status          string           // Exact / Fuzzy / Unknown
+	ReturnedCode    string           // код из возврата
+	ReturnedPlaces  []codes.Location // где в возврате
+	MatchedCode     string           // лучший похожий код из выдачи
+	MatchedPlaces   []codes.Location // где в выдаче
+	MatchPercent    float64          // процент схожести (0–100)
+	SharedGramCount int              // сколько n-грамм совпало
 }
 
 type Matcher struct {
 	issued codes.Index
 	config Config
-	grams  map[string][]string
+	grams  map[string][]string // n-граммный индекс: грамма → коды, где она встречается
 }
 
+// NewMatcher — строит n-граммный индекс по всем выданным кодам.
+// Для каждого кода нарезает n-граммы (по 3 символа) и складывает в map[грамма] → коды.
+// Это позволяет быстро найти кандидатов: вместо перебора 20000 кодов — смотрим только те,
+// у которых есть общие n-граммы с искомым.
 func NewMatcher(issued codes.Index, config Config) Matcher {
 	if config.MinPercent == 0 {
 		config.MinPercent = DefaultConfig().MinPercent
@@ -59,6 +65,8 @@ func NewMatcher(issued codes.Index, config Config) Matcher {
 		grams:  make(map[string][]string),
 	}
 
+	// Строим n-граммный индекс: для каждого выданного кода нарезаем граммы
+	// и добавляем код в списки всех его грамм.
 	for _, code := range issued.Codes() {
 		for _, gram := range uniqueGrams(code, matcher.config.GramSize) {
 			matcher.grams[gram] = append(matcher.grams[gram], code)
@@ -68,6 +76,8 @@ func NewMatcher(issued codes.Index, config Config) Matcher {
 	return matcher
 }
 
+// MatchReturned — сопоставить все возвращённые коды с выданными.
+// Результат сортируется: сначала Fuzzy (нужен контроль), потом Unknown, потом Exact.
 func (m Matcher) MatchReturned(returned codes.Index) []Result {
 	results := make([]Result, 0, returned.UniqueCount())
 	for _, returnedCode := range returned.Codes() {
@@ -88,7 +98,13 @@ func (m Matcher) MatchReturned(returned codes.Index) []Result {
 	return results
 }
 
+// MatchCode — для одного возвращённого кода определить его статус.
+//  1. Точное совпадение: код есть в issued → StatusExact (100%).
+//  2. Нет точного → собираем кандидатов через n-граммы.
+//  3. Среди кандидатов считаем SimilarityPercent (Левенштейн).
+//  4. Если лучший ≥ MinPercent → StatusFuzzy, иначе StatusUnknown.
 func (m Matcher) MatchCode(returnedCode string) Result {
+	// Шаг 1: точное совпадение.
 	if m.issued.Has(returnedCode) {
 		return Result{
 			Status:        StatusExact,
@@ -98,11 +114,13 @@ func (m Matcher) MatchCode(returnedCode string) Result {
 		}
 	}
 
+	// Шаг 2: отбор кандидатов через n-граммы.
 	candidates := m.candidates(returnedCode)
 	if len(candidates) == 0 {
 		return Result{Status: StatusUnknown}
 	}
 
+	// Шаг 3-4: сравнение Левенштейном + проверка порога.
 	var best Result
 	for _, candidate := range candidates {
 		percent := SimilarityPercent(returnedCode, candidate.code)
@@ -126,9 +144,13 @@ func (m Matcher) MatchCode(returnedCode string) Result {
 
 type candidate struct {
 	code        string
-	sharedGrams int
+	sharedGrams int // сколько n-грамм совпало с искомым кодом
 }
 
+// candidates — отобрать коды-кандидаты по n-граммам.
+// Для каждой граммы искомого кода достаём все коды из grams[грамма].
+// Сортируем по убыванию sharedGrams (чем больше общих грамм — тем вероятнее совпадение).
+// Обрезаем до MaxCandidates (чтобы Левенштейн не считался на 10000 кодах).
 func (m Matcher) candidates(returnedCode string) []candidate {
 	counts := make(map[string]int)
 	for _, gram := range uniqueGrams(returnedCode, m.config.GramSize) {
@@ -156,6 +178,9 @@ func (m Matcher) candidates(returnedCode string) []candidate {
 	return candidates
 }
 
+// SimilarityPercent — процент схожести двух строк (0–100).
+// Использует расстояние Левенштейна: (1 - расстояние/максДлина) * 100.
+// Пример: "ABCD" vs "ABXD" → расстояние 1, максДлина 4 → (1 - 1/4)*100 = 75%.
 func SimilarityPercent(a, b string) float64 {
 	ar := []rune(a)
 	br := []rune(b)
@@ -167,6 +192,8 @@ func SimilarityPercent(a, b string) float64 {
 	return (1 - float64(distance)/maxLen) * 100
 }
 
+// levenshtein — расстояние Левенштейна (минимальное число вставок/удалений/замен).
+// Использует два ряда (previous/current) для экономии памяти — O(min(m,n)).
 func levenshtein(a, b []rune) int {
 	if len(a) == 0 {
 		return len(b)
@@ -189,9 +216,9 @@ func levenshtein(a, b []rune) int {
 				cost = 1
 			}
 			current[j] = minInt(
-				previous[j]+1,
-				current[j-1]+1,
-				previous[j-1]+cost,
+				previous[j]+1,      // удаление
+				current[j-1]+1,     // вставка
+				previous[j-1]+cost, // замена
 			)
 		}
 		previous, current = current, previous
@@ -200,6 +227,8 @@ func levenshtein(a, b []rune) int {
 	return previous[len(b)]
 }
 
+// uniqueGrams — уникальные n-граммы строки (подстроки длины size).
+// Пример: "ABCD", size=3 → ["ABC", "BCD"].
 func uniqueGrams(value string, size int) []string {
 	runes := []rune(value)
 	if len(runes) < size || size <= 0 {
@@ -219,6 +248,8 @@ func uniqueGrams(value string, size int) []string {
 	return grams
 }
 
+// statusOrder — порядок сортировки результатов: Fuzzy (0) → Unknown (1) → Exact (2).
+// Fuzzy первыми — чтобы пользователь видел коды, требующие ручного контроля.
 func statusOrder(status string) int {
 	switch status {
 	case StatusFuzzy:
