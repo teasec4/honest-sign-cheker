@@ -2,19 +2,20 @@
 	import { duplicateCheck, type DuplicateReport } from '$lib/api';
 	import ProblemTable from '$lib/ProblemTable.svelte';
 
-	let restoredFile: File | null = null;
-	let loading = false;
-	let error = '';
-	let report: DuplicateReport | null = null;
+	let restoredFile = $state<File | null>(null);
+	let loading = $state(false);
+	let error = $state('');
+	let report = $state<DuplicateReport | null>(null);
 
-	$: canSubmit = restoredFile;
+	let canSubmit = $derived(Boolean(restoredFile));
 
 	function setFile(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 		restoredFile = input.files?.[0] ?? null;
 	}
 
-	async function submit() {
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
 		if (!restoredFile) return;
 		loading = true;
 		error = '';
@@ -30,11 +31,11 @@
 </script>
 
 <div class="grid">
-	<form class="panel" on:submit|preventDefault={submit}>
+	<form class="panel" onsubmit={submit}>
 		<h2>Проверка дублей</h2>
 		<label>
 			Восстановленный файл
-			<input type="file" accept=".csv,.txt,.xlsx,.xlsm" on:change={setFile} />
+			<input type="file" accept=".csv,.txt,.xlsx,.xlsm" onchange={setFile} />
 		</label>
 		<button disabled={!canSubmit || loading}>{loading ? 'Проверяю...' : 'Проверить'}</button>
 	</form>

@@ -2,14 +2,14 @@
 	import { primaryCheck, type PrimaryReport } from '$lib/api';
 	import ProblemTable from '$lib/ProblemTable.svelte';
 
-	let issuedFile: File | null = null;
-	let returnedFile: File | null = null;
-	let minPercent = 85;
-	let loading = false;
-	let error = '';
-	let report: PrimaryReport | null = null;
+	let issuedFile = $state<File | null>(null);
+	let returnedFile = $state<File | null>(null);
+	let minPercent = $state(85);
+	let loading = $state(false);
+	let error = $state('');
+	let report = $state<PrimaryReport | null>(null);
 
-	$: canSubmit = issuedFile && returnedFile;
+	let canSubmit = $derived(Boolean(issuedFile && returnedFile));
 
 	function setFile(event: Event, target: 'issued' | 'returned') {
 		const input = event.currentTarget as HTMLInputElement;
@@ -18,7 +18,8 @@
 		if (target === 'returned') returnedFile = file;
 	}
 
-	async function submit() {
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
 		if (!issuedFile || !returnedFile) return;
 		loading = true;
 		error = '';
@@ -34,15 +35,15 @@
 </script>
 
 <div class="grid">
-	<form class="panel" on:submit|preventDefault={submit}>
+	<form class="panel" onsubmit={submit}>
 		<h2>Первичная сверка</h2>
 		<label>
 			Выданные коды
-			<input type="file" accept=".csv,.txt,.xlsx,.xlsm" on:change={(event) => setFile(event, 'issued')} />
+			<input type="file" accept=".csv,.txt,.xlsx,.xlsm" onchange={(event) => setFile(event, 'issued')} />
 		</label>
 		<label>
 			Возврат поставщика
-			<input type="file" accept=".csv,.txt,.xlsx,.xlsm" on:change={(event) => setFile(event, 'returned')} />
+			<input type="file" accept=".csv,.txt,.xlsx,.xlsm" onchange={(event) => setFile(event, 'returned')} />
 		</label>
 		<label>
 			Порог похожести, %

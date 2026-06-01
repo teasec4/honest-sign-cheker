@@ -1,8 +1,12 @@
 <script lang="ts">
 	import type { Problem } from './api';
 
-	export let title: string;
-	export let problems: Problem[] = [];
+	type Props = {
+		title: string;
+		problems?: Problem[];
+	};
+
+	let { title, problems = [] }: Props = $props();
 </script>
 
 {#if problems.length > 0}
