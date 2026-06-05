@@ -49,12 +49,6 @@ bun install --cwd node-api
 bun run dev
 ```
 
-Или через bash-скрипт:
-
-```bash
-./dev.sh
-```
-
 После запуска:
 
 - API: `http://127.0.0.1:8080`
@@ -68,26 +62,16 @@ bun run dev
 bun run dev
 ```
 
-То же самое через bash-скрипт:
-
-```bash
-./dev.sh dev
-```
-
 Запустить только Node API:
 
 ```bash
 bun run dev:api
-# или
-./dev.sh api
 ```
 
 Запустить только web:
 
 ```bash
 bun run dev:web
-# или
-./dev.sh web
 ```
 
 Запустить собранный Node API:
@@ -101,8 +85,6 @@ bun run --cwd node-api start
 
 ```bash
 go run ./cmd/api
-# или
-./dev.sh go-api
 ```
 
 Важно: Node API и Go API по умолчанию используют один порт `127.0.0.1:8080`, поэтому одновременно их запускать не нужно.
@@ -128,12 +110,6 @@ bun run build:web
 ```bash
 go test ./...
 go vet ./...
-```
-
-Быстрая общая проверка:
-
-```bash
-./dev.sh check
 ```
 
 ## CLI на Go
